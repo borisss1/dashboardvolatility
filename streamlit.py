@@ -148,11 +148,12 @@ kurt_val = kurtosis(df['return'].dropna()) if len(df['return'].dropna())>0 else 
 max_dd = df['drawdown'].min()
 annualized_vol = df['log_return'].std() * np.sqrt(365)
 
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "Stats & Momentum",
     "Weekly GPR & Position Designer",
     "Volatility Analytics",
-    "Kelly Comparison"
+    "Kelly Comparison",
+    "Portfolio Optimization"
 ])
 
 with tab1:
@@ -423,3 +424,63 @@ with tab4:
     ax.legend()
     ax.grid(True, linestyle='--', linewidth=0.5)
     st.pyplot(fig)
+
+    with tab5:
+        st.subheader("Monte Carlo Portfolio Optimization: BTC / ETH / SOL")
+    price_frames = []
+    for coin in cryptos:
+        df_coin = fetch_crypto_data(coin)
+        if not df_coin.empty:
+            price_frames.append(df_coin["close"].rename(coin.upper()))
+    if len(price_frames) == 3:
+        price_df = pd.concat(price_frames, axis=1).dropna()
+        returns = price_df.pct_change().dropna()
+        mean_daily = returns.mean()
+        cov_daily = returns.cov()
+        trading_days = 365
+        rf_rate = 0.0
+        target_return_sortino = 0.0
+
+        def portfolio_stats(weights):
+            annual_ret = np.dot(weights, mean_daily) * trading_days
+            annual_vol = np.sqrt(weights.T @ cov_daily.values @ weights) * np.sqrt(trading_days)
+            sharpe = (annual_ret - rf_rate)/annual_vol if annual_vol>0 else np.nan
+            return annual_ret, annual_vol, sharpe
+
+        def sortino_ratio(weights):
+            daily_target = target_return_sortino/trading_days
+            port_daily = returns.dot(weights)
+            downside = np.minimum(port_daily - daily_target, 0)
+            dd_daily = np.sqrt(np.mean(downside**2))
+            dd_annual = dd_daily * np.sqrt(trading_days)
+            annual_ret = port_daily.mean()*trading_days
+            sortino = (annual_ret - target_return_sortino)/dd_annual if dd_annual>0 else np.nan
+            return sortino
+
+        np.random.seed(42)
+        results = []
+        weights_list = []
+        n_simulations = 20000
+        for _ in range(n_simulations):
+            w = np.random.random(len(symbols)); w/=w.sum()
+            ret, vol, sharpe = portfolio_stats(w)
+            sortino = sortino_ratio(w)
+            results.append([ret, vol, sharpe, sortino])
+            weights_list.append(w)
+
+        pf = pd.DataFrame(results, columns=["ret","vol","sharpe","sortino"])
+        for i,s in enumerate(symbols):
+            pf[f"w_{s}"] = [w[i] for w in weights_list]
+
+        max_sharpe = pf.iloc[pf["sharpe"].idxmax()]
+        max_sortino = pf.iloc[pf["sortino"].idxmax()]
+        min_vol = pf.iloc[pf["vol"].idxmin()]
+
+        col1, col2, col3 = st.columns(3)
+        with col1: st.write("**Max Sharpe**"); st.write(max_sharpe)
+        with col2: st.write("**Max Sortino**"); st.write(max_sortino)
+        with col3: st.write("**Min Volatility**"); st.write(min_vol)
+
+        fig, ax = plt.subplots(figsize=(10,5))
+        sc = ax.scatter(pf["vol"], pf["ret"], c=pf["sharpe"], s=8, cmap="viridis", alpha=0.7)
+        ax.set
