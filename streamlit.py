@@ -152,8 +152,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "Stats & Momentum",
     "Weekly GPR & Position Designer",
     "Volatility Analytics",
-    "Kelly Comparison",
-    "Portfolio Optimization"
+    "Kelly Comparison"
 ])
 
 with tab1:
@@ -423,4 +422,5 @@ with tab4:
     ax.set_title("Kelly Log Growth Function Comparison with Realized Volatility")
     ax.legend()
     ax.grid(True, linestyle='--', linewidth=0.5)
+
     st.pyplot(fig)
