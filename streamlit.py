@@ -425,62 +425,69 @@ with tab4:
     ax.grid(True, linestyle='--', linewidth=0.5)
     st.pyplot(fig)
 
-    with tab5:
-        st.subheader("Monte Carlo Portfolio Optimization: BTC / ETH / SOL")
+with tab5:
+    st.subheader("Monte Carlo Portfolio Optimization: BTC / ETH / SOL")
+
+    cryptos = ["bitcoin", "ethereum", "solana"]
+    symbols = ["BTC", "ETH", "SOL"]
     price_frames = []
     for coin in cryptos:
         df_coin = fetch_crypto_data(coin)
         if not df_coin.empty:
             price_frames.append(df_coin["close"].rename(coin.upper()))
-    if len(price_frames) == 3:
+
+    if len(price_frames) < 3:
+        st.warning("Not enough data to run portfolio optimization.")
+    else:
         price_df = pd.concat(price_frames, axis=1).dropna()
         returns = price_df.pct_change().dropna()
         mean_daily = returns.mean()
         cov_daily = returns.cov()
         trading_days = 365
         rf_rate = 0.0
-        target_return_sortino = 0.0
 
         def portfolio_stats(weights):
             annual_ret = np.dot(weights, mean_daily) * trading_days
             annual_vol = np.sqrt(weights.T @ cov_daily.values @ weights) * np.sqrt(trading_days)
-            sharpe = (annual_ret - rf_rate)/annual_vol if annual_vol>0 else np.nan
+            sharpe = (annual_ret - rf_rate)/annual_vol if annual_vol > 0 else np.nan
             return annual_ret, annual_vol, sharpe
 
-        def sortino_ratio(weights):
-            daily_target = target_return_sortino/trading_days
-            port_daily = returns.dot(weights)
-            downside = np.minimum(port_daily - daily_target, 0)
-            dd_daily = np.sqrt(np.mean(downside**2))
-            dd_annual = dd_daily * np.sqrt(trading_days)
-            annual_ret = port_daily.mean()*trading_days
-            sortino = (annual_ret - target_return_sortino)/dd_annual if dd_annual>0 else np.nan
-            return sortino
-
         np.random.seed(42)
+        n_simulations = 20000
         results = []
         weights_list = []
-        n_simulations = 20000
+
         for _ in range(n_simulations):
-            w = np.random.random(len(symbols)); w/=w.sum()
+            w = np.random.random(len(symbols))
+            w /= w.sum()
             ret, vol, sharpe = portfolio_stats(w)
-            sortino = sortino_ratio(w)
-            results.append([ret, vol, sharpe, sortino])
+            results.append([ret, vol, sharpe])
             weights_list.append(w)
 
-        pf = pd.DataFrame(results, columns=["ret","vol","sharpe","sortino"])
-        for i,s in enumerate(symbols):
-            pf[f"w_{s}"] = [w[i] for w in weights_list]
+        pf = pd.DataFrame(results, columns=["Return", "Volatility", "Sharpe"])
+        for i, s in enumerate(symbols):
+            pf[f"Weight_{s}"] = [w[i] for w in weights_list]
 
-        max_sharpe = pf.iloc[pf["sharpe"].idxmax()]
-        max_sortino = pf.iloc[pf["sortino"].idxmax()]
-        min_vol = pf.iloc[pf["vol"].idxmin()]
+        max_sharpe = pf.iloc[pf["Sharpe"].idxmax()]
+        min_vol = pf.iloc[pf["Volatility"].idxmin()]
 
-        col1, col2, col3 = st.columns(3)
-        with col1: st.write("**Max Sharpe**"); st.write(max_sharpe)
-        with col2: st.write("**Max Sortino**"); st.write(max_sortino)
-        with col3: st.write("**Min Volatility**"); st.write(min_vol)
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("**Maximum Sharpe Ratio Portfolio**")
+            st.write(max_sharpe)
+        with col2:
+            st.markdown("**Minimum Volatility Portfolio**")
+            st.write(min_vol)
 
         fig, ax = plt.subplots(figsize=(10,5))
-        sc = ax.scatter(pf["vol"], pf["ret"], c=pf["sharpe"], s=8, cmap="viridis", alpha=0.7)
-        ax.set
+        sc = ax.scatter(pf["Volatility"], pf["Return"], c=pf["Sharpe"], cmap="viridis", alpha=0.7, s=10)
+        ax.scatter(max_sharpe["Volatility"], max_sharpe["Return"], color='red', marker='*', s=200, label='Max Sharpe')
+        ax.scatter(min_vol["Volatility"], min_vol["Return"], color='blue', marker='*', s=200, label='Min Volatility')
+        ax.set_xlabel("Annualized Volatility")
+        ax.set_ylabel("Annualized Return")
+        ax.set_title("Monte Carlo Portfolio Optimization")
+        ax.grid(True, linestyle='--', linewidth=0.5)
+        ax.legend()
+        cbar = plt.colorbar(sc, ax=ax)
+        cbar.set_label("Sharpe Ratio")
+        st.pyplot(fig)
