@@ -148,7 +148,7 @@ kurt_val = kurtosis(df['return'].dropna()) if len(df['return'].dropna())>0 else 
 max_dd = df['drawdown'].min()
 annualized_vol = df['log_return'].std() * np.sqrt(365)
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4 = st.tabs([
     "Stats & Momentum",
     "Weekly GPR & Position Designer",
     "Volatility Analytics",
@@ -422,5 +422,4 @@ with tab4:
     ax.set_title("Kelly Log Growth Function Comparison with Realized Volatility")
     ax.legend()
     ax.grid(True, linestyle='--', linewidth=0.5)
-
     st.pyplot(fig)
