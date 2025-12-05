@@ -426,68 +426,86 @@ with tab4:
     st.pyplot(fig)
 
 with tab5:
-    st.subheader("Monte Carlo Portfolio Optimization: BTC / ETH / SOL")
+    st.subheader("Monte Carlo Portfolio Optimization")
 
-    cryptos = ["bitcoin", "ethereum", "solana"]
-    symbols = ["BTC", "ETH", "SOL"]
-    price_frames = []
-    for coin in cryptos:
-        df_coin = fetch_crypto_data(coin)
-        if not df_coin.empty:
-            price_frames.append(df_coin["close"].rename(coin.upper()))
+    available_cryptos = {
+        "Bitcoin": "bitcoin",
+        "Ethereum": "ethereum",
+        "Solana": "solana",
+        "Cardano": "cardano",
+        "Ripple": "ripple"
+    }
+    selected_assets = st.multiselect(
+        "Select Cryptocurrencies for Portfolio Optimization",
+        options=list(available_cryptos.keys()),
+        default=["Bitcoin", "Ethereum", "Solana"]
+    )
 
-    if len(price_frames) < 3:
-        st.warning("Not enough data to run portfolio optimization.")
+    if not selected_assets:
+        st.warning("Please select at least one asset to run the optimization.")
     else:
-        price_df = pd.concat(price_frames, axis=1).dropna()
-        returns = price_df.pct_change().dropna()
-        mean_daily = returns.mean()
-        cov_daily = returns.cov()
-        trading_days = 365
-        rf_rate = 0.0
 
-        def portfolio_stats(weights):
-            annual_ret = np.dot(weights, mean_daily) * trading_days
-            annual_vol = np.sqrt(weights.T @ cov_daily.values @ weights) * np.sqrt(trading_days)
-            sharpe = (annual_ret - rf_rate)/annual_vol if annual_vol > 0 else np.nan
-            return annual_ret, annual_vol, sharpe
+        price_frames = []
+        symbols = []
+        for name in selected_assets:
+            coin = available_cryptos[name]
+            df_coin = fetch_crypto_data(coin)
+            if not df_coin.empty:
+                price_frames.append(df_coin["close"].rename(name.upper()))
+                symbols.append(name.upper())
 
-        np.random.seed(42)
-        n_simulations = 20000
-        results = []
-        weights_list = []
+        if len(price_frames) < 2:
+            st.warning("Not enough data to run portfolio optimization. Select at least 2 assets.")
+        else:
+            price_df = pd.concat(price_frames, axis=1).dropna()
+            returns = price_df.pct_change().dropna()
+            mean_daily = returns.mean()
+            cov_daily = returns.cov()
+            trading_days = 365
+            rf_rate = 0.0
 
-        for _ in range(n_simulations):
-            w = np.random.random(len(symbols))
-            w /= w.sum()
-            ret, vol, sharpe = portfolio_stats(w)
-            results.append([ret, vol, sharpe])
-            weights_list.append(w)
+            def portfolio_stats(weights):
+                annual_ret = np.dot(weights, mean_daily) * trading_days
+                annual_vol = np.sqrt(weights.T @ cov_daily.values @ weights) * np.sqrt(trading_days)
+                sharpe = (annual_ret - rf_rate)/annual_vol if annual_vol > 0 else np.nan
+                return annual_ret, annual_vol, sharpe
 
-        pf = pd.DataFrame(results, columns=["Return", "Volatility", "Sharpe"])
-        for i, s in enumerate(symbols):
-            pf[f"Weight_{s}"] = [w[i] for w in weights_list]
+            n_simulations = st.slider("Number of Monte Carlo Simulations", 1000, 50000, 20000, step=1000)
+            np.random.seed(42)
+            results = []
+            weights_list = []
 
-        max_sharpe = pf.iloc[pf["Sharpe"].idxmax()]
-        min_vol = pf.iloc[pf["Volatility"].idxmin()]
+            for _ in range(n_simulations):
+                w = np.random.random(len(symbols))
+                w /= w.sum()
+                ret, vol, sharpe = portfolio_stats(w)
+                results.append([ret, vol, sharpe])
+                weights_list.append(w)
 
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("**Maximum Sharpe Ratio Portfolio**")
-            st.write(max_sharpe)
-        with col2:
-            st.markdown("**Minimum Volatility Portfolio**")
-            st.write(min_vol)
+            pf = pd.DataFrame(results, columns=["Return", "Volatility", "Sharpe"])
+            for i, s in enumerate(symbols):
+                pf[f"Weight_{s}"] = [w[i] for w in weights_list]
 
-        fig, ax = plt.subplots(figsize=(10,5))
-        sc = ax.scatter(pf["Volatility"], pf["Return"], c=pf["Sharpe"], cmap="viridis", alpha=0.7, s=10)
-        ax.scatter(max_sharpe["Volatility"], max_sharpe["Return"], color='red', marker='*', s=200, label='Max Sharpe')
-        ax.scatter(min_vol["Volatility"], min_vol["Return"], color='blue', marker='*', s=200, label='Min Volatility')
-        ax.set_xlabel("Annualized Volatility")
-        ax.set_ylabel("Annualized Return")
-        ax.set_title("Monte Carlo Portfolio Optimization")
-        ax.grid(True, linestyle='--', linewidth=0.5)
-        ax.legend()
-        cbar = plt.colorbar(sc, ax=ax)
-        cbar.set_label("Sharpe Ratio")
-        st.pyplot(fig)
+            max_sharpe = pf.iloc[pf["Sharpe"].idxmax()]
+            min_vol = pf.iloc[pf["Volatility"].idxmin()]
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("**Maximum Sharpe Ratio Portfolio**")
+                st.write(max_sharpe)
+            with col2:
+                st.markdown("**Minimum Volatility Portfolio**")
+                st.write(min_vol)
+
+            fig, ax = plt.subplots(figsize=(10,5))
+            sc = ax.scatter(pf["Volatility"], pf["Return"], c=pf["Sharpe"], cmap="viridis", alpha=0.7, s=10)
+            ax.scatter(max_sharpe["Volatility"], max_sharpe["Return"], color='red', marker='*', s=200, label='Max Sharpe')
+            ax.scatter(min_vol["Volatility"], min_vol["Return"], color='blue', marker='*', s=200, label='Min Volatility')
+            ax.set_xlabel("Annualized Volatility")
+            ax.set_ylabel("Annualized Return")
+            ax.set_title("Monte Carlo Portfolio Optimization")
+            ax.grid(True, linestyle='--', linewidth=0.5)
+            ax.legend()
+            cbar = plt.colorbar(sc, ax=ax)
+            cbar.set_label("Sharpe Ratio")
+            st.pyplot(fig)
